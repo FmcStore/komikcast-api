@@ -9,9 +9,19 @@ set -u
 B=${BASE:-https://komikcast.aoxi.my.id}
 pass=0; fail=0
 
+# Resolver lokal (202.182.48.243) bisa lambat/NXDOMAIN untuk hostname baru
+# walau record globalnya sudah live. Kalau begitu, lewati resolver lokal
+# dengan DoH, jangan ubah apa pun di sisi tunnel.
+EXTRA=""
+HOST=$(printf '%s' "$B" | sed -E 's#https?://([^/:]+).*#\1#')
+if ! getent hosts "$HOST" >/dev/null 2>&1; then
+  EXTRA="--doh-url https://cloudflare-dns.com/dns-query"
+  echo "note: $HOST belum resolve di resolver lokal, pakai DoH"
+fi
+
 chk() { # chk <label> <path> <grep-pattern>
   local code body
-  body=$(curl -s -m 180 -w '\n%{http_code}' "$B$2")
+  body=$(curl -s -m 180 $EXTRA -w '\n%{http_code}' "$B$2")
   code=$(printf '%s' "$body" | tail -1)
   body=$(printf '%s' "$body" | head -n -1)
   if [ "$code" = "200" ] && printf '%s' "$body" | grep -q "$3"; then
