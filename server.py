@@ -112,11 +112,25 @@ def rating_str(v):
     return str(v).rstrip(".0") if isinstance(v, float) else str(v)
 
 
+def num_str(v):
+    """Nomor chapter -> string tanpa ekor '.0'.
+
+    364   -> '364'
+    364.2 -> '364.2'
+    """
+    if v is None:
+        return None
+    if isinstance(v, float):
+        return str(int(v)) if v.is_integer() else repr(v)
+    return str(v)
+
+
 def chapter_slug(manga_slug, number):
     """Full chapter slug yang dikenali route /comic/komikcast/chapter/<slug>."""
-    if not number:
+    n = num_str(number)
+    if not n:
         return None
-    return "%s-chapter-%s" % (manga_slug, number)
+    return "%s-chapter-%s" % (manga_slug, n)
 
 
 def chapter_slug_of(manga_slug, chapter):
@@ -126,11 +140,14 @@ def chapter_slug_of(manga_slug, chapter):
 
 
 def parse_chapter_slug(slug):
-    """'{manga}-chapter-{n}' -> (manga_slug, n). None jika tidak cocok."""
-    m = re.match(r"^(.*)-chapter-(\d+)$", slug)
+    """'{manga}-chapter-{n}' -> (manga_slug, n). None jika tidak cocok.
+
+    `n` boleh desimal: KomikCast memakai chapter seperti '364.2'.
+    """
+    m = re.match(r"^(.*)-chapter-(\d+(?:\.\d+)?)$", slug)
     if not m:
         return None
-    return m.group(1), int(m.group(2))
+    return m.group(1), m.group(2)
 
 
 def list_item(it, with_color=True):
@@ -228,15 +245,30 @@ def h_detail(env):
     dd = local_data("/api/manga/" + urllib.parse.quote(slug))
     m = dd.get("manga") or {}
     chapters = m.get("chapters") or []
+    # Upstream sudah newest-first (sama seperti Sanka), jadi JANGAN dibalik:
+    # Sanka juga mengirim chapters[] dari terbaru ke terlama.
     chlist = [{
         "title": c.get("title"),
         "slug": chapter_slug(slug, c.get("chapter_number")),
         "releaseTime": rel_time(c.get("created_at")),
-    } for c in reversed(chapters)]
-    first = chlist[0] if chlist else None
-    last = chlist[-1] if chlist else None
+    } for c in chapters]
+    latest = chlist[0] if chlist else None      # terbaru
+    first = chlist[-1] if chlist else None      # paling awal
     genres = [{"name": g.get("name"), "slug": "/genres/" + str(g.get("slug", ""))}
               for g in (m.get("genres") or [])]
+    # relatedMangas (bentuknya sama seperti Sanka similarManga)
+    def rel_image(r):
+        p = r.get("poster")
+        if not p:
+            return None
+        return p if p.startswith("http") else ("http://127.0.0.1:8791" + p)
+
+    similar = [{
+        "title": r.get("title"),
+        "slug": r.get("slug"),
+        "image": rel_image(r),
+        "description": (r.get("synopsis") or "")[:200],
+    } for r in (dd.get("relatedMangas") or [])]
     data = {
         "id": str(m.get("id")),
         "title": m.get("title"),
@@ -254,9 +286,10 @@ def h_detail(env):
         "genres": genres,
         "description": m.get("synopsis"),
         "firstChapter": {"title": first["title"], "slug": first["slug"]} if first else None,
-        "latestChapter": {"title": last["title"], "slug": last["slug"]} if last else None,
+        "latestChapter": {"title": latest["title"], "slug": latest["slug"]} if latest else None,
         "chapters": chlist,
         "spoilerImages": [],
+        "similarManga": similar,
     }
     return {"creator": CREATOR, "success": True, "data": data}
 
@@ -266,18 +299,47 @@ def h_chapter(env):
     if not parsed:
         raise ApiError(404, "slug harus berbentuk {komik}-chapter-{n}")
     manga_slug, num = parsed
-    dd = local_data("/api/manga/%s/chapter/%d" % (urllib.parse.quote(manga_slug), num))
+    dd = local_data("/api/manga/%s/chapter/%s"
+                    % (urllib.parse.quote(manga_slug), urllib.parse.quote(num)))
     ch = dd.get("chapter") or {}
     ordered = dd.get("imageUrls") or []
     images = [{"id": i + 1, "url": u} for i, u in enumerate(ordered)]
     prev = chapter_slug_of(manga_slug, dd.get("prev"))
     nxt = chapter_slug_of(manga_slug, dd.get("next"))
+
+    # thumbnail + komikInfo: Sanka menyertakannya di /chapter, jadi ambil
+    # dari detail komik yang sama. `komikInfo.chapters` = 5 chapter terbaru
+    # (tanpa releaseTime), sama seperti Sanka.
+    info, chapters, poster_url = {}, [], None
+    try:
+        det = local_data("/api/manga/" + urllib.parse.quote(manga_slug))
+        m = det.get("manga") or {}
+        poster = m.get("poster")
+        if poster and not poster.startswith("http"):
+            poster = "http://127.0.0.1:8791" + poster
+        poster_url = poster
+        info = {
+            "title": "Komik %s Indo" % (m.get("title") or manga_slug),
+            "description": m.get("synopsis"),
+        }
+        # upstream sudah newest-first; Sanka juga begitu -> cukup ambil 5 teratas
+        recent = (m.get("chapters") or [])[:5]
+        chapters = [{
+            "title": c.get("title"),
+            "slug": chapter_slug(manga_slug, c.get("chapter_number")),
+        } for c in recent]
+    except ApiError:
+        pass
+    info["chapters"] = chapters
+
     data = {
         "id": str(ch.get("id")),
         "title": ch.get("title") or ("%s Chapter %s" % (manga_slug, num)),
         "navigation": {"prev": prev, "next": nxt},
         "allChapterSlug": manga_slug,
         "images": images,
+        "thumbnail": {"url": poster_url, "title": info.get("title")},
+        "komikInfo": info,
     }
     return {"creator": CREATOR, "success": True, "data": data}
 
