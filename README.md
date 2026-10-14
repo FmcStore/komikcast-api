@@ -6,8 +6,17 @@ Ganti `komikindo` → `komikcast` di URL, response-nya tetap sama.
 
 ```
 Sanka    : https://www.sankavollerei.web.id/comic/komikindo/latest/1
-Drop-in  : https://<tunnel>/comic/komikcast/latest/1
+Drop-in  : https://komikcast.aoxi.my.id/comic/komikcast/latest/1
 ```
+
+## URL publik
+
+**https://komikcast.aoxi.my.id/comic/komikcast**
+
+Named Cloudflare tunnel, jadi hostname-nya tetap (tidak berubah tiap
+restart seperti quick tunnel). Unit: `komikcast-sanka-tunnel.service`,
+config: `named-config.yml` (tunnel `komikcast-sanka`,
+`4e301198-bab0-4184-856a-0e5e4e9ce8b4`).
 
 ## Endpoint (sama seperti Sanka)
 
@@ -60,7 +69,8 @@ untuk link publik cloudflared).
 
 ```bash
 systemctl --user status komikcast-sanka
-grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' tunnel.log | tail -1
+systemctl --user status komikcast-sanka-tunnel
+curl -s https://komikcast.aoxi.my.id/comic/komikcast | head -5
 ```
 
 ## Catatan

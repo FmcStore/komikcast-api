@@ -1,0 +1,7 @@
+tunnel: 4e301198-bab0-4184-856a-0e5e4e9ce8b4
+credentials-file: /root/.cloudflared/4e301198-bab0-4184-856a-0e5e4e9ce8b4.json
+
+ingress:
+  - hostname: komikcast.aoxi.my.id
+    service: http://127.0.0.1:8795
+  - service: http_status:404
