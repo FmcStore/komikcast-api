@@ -81,3 +81,17 @@ curl -s https://komikcast.aoxi.my.id/comic/komikcast | head -5
 - Slug antar sumber berbeda: slug Sanka/Komikindo (mis. `one-piece`) tidak
   ada di KomikCast. Selalu pakai slug dari `latest`/`library`/`search`
   API ini sendiri.
+- **Chapter desimal didukung** (`blue-lock-chapter-364.2`). KomikCast
+  memang punya chapter seperti 364.2 / 268.5.
+- **Urutan `chapters`**: terbaru ke terlama, sama seperti Sanka.
+  `firstChapter` = chapter paling awal, `latestChapter` = paling baru.
+- **Root `/comic/komikcast` sengaja beda** dari Sanka (mereka balas
+  `status`/`message`), karena root di sini dipakai sebagai katalog endpoint.
+  Route datanya identik.
+
+## Uji
+
+```bash
+bash smoke.sh        # 7 endpoint lewat tunnel, cek isi JSON
+python3 parity.py    # diff struktur vs Sanka asli, per endpoint
+```
